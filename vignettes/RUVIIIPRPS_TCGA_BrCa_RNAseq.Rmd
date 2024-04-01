@@ -657,15 +657,15 @@ brca.se.obj <- plotDGE(
     verbose = FALSE)
 ```
 
-
 # RUV-III-PRPS normalization
 ## Find NCGs
+### Supervised 
 ```{r}
-brca.se.obj <- findNCGsSupervised(
+brca.se.obj <- findNcgSupervised(
     se.obj = brca.se.obj, 
-    assay.name = 'unstranded', 
-    approach = 'TWAnova', 
-    ncg.selection.method = 'noneOverlap', 
+    assay.name = 'RawCount', 
+    approach = 'AnoCorrAs', 
+    ncg.selection.method = 'AbsNoneOverlap', 
     bio.variables = 'PAM50', 
     uv.variables = c('library.size', 'batch.FcCh', 'tumour.purity.estimate'), 
     nb.ncg = 10, 
@@ -698,17 +698,36 @@ brca.se.obj <- findNCGsSupervised(
     assess.variables = FALSE, 
     remove.na = 'none', 
     save.se.obj = TRUE, 
+    output.name = 'AnoCorrAs',
     verbose = TRUE)
-brca.se.obj@metadata$NCG$supervised$
 ```
 
+
+### Un supervised 
 ```{r}
-brca.se.obj <- createSupervisedPRPS(
+brca.se.obj <- findNcgsUnSupervised(
     se.obj = brca.se.obj, 
-    assay.name = 'unstranded', 
+    assay.name = 'RawCount', 
+     ncg.selection.method ='AbsNoneOverlap',
+    grid.nb = 1,
+    top.rank.bio.genes = 80,
+    top.rank.uv.genes = 10,
+    uv.variables = c('library.size', 'batch.FcCh', 'tumour.purity.estimate'),
+    variables.to.assess.ncg = c('PAM50','library.size', 'batch.FcCh', 'tumour.purity.estimate'))
+brca.se.obj@metadata$NCG$un.supervised$
+```
+
+
+# Find negative control genes
+## supervised
+
+```{r}
+brca.se.obj <- createPrPsSupervised(
+    se.obj = brca.se.obj, 
+    assay.name = 'RawCount', 
     bio.variables = 'PAM50', 
     uv.variables = c('library.size', 'batch.FcCh', 'tumour.purity.estimate'), 
-    apply.other.uv.variables = TRUE, 
+    apply.other.uv.variables = T, 
     min.sample.for.prps = 3, 
     bio.clustering.method = 'kmeans', 
     nb.bio.clusters = 3, 
@@ -722,19 +741,30 @@ brca.se.obj <- createSupervisedPRPS(
     remove.na = 'none', 
     save.se.obj = TRUE, 
     plot.output = TRUE, 
+    prps.set.name = 'Set2',
     verbose = TRUE)
-brca.se.obj@metadata$NCG$supervised$
+brca.se.obj@metadata$PRPS <- NULL
 ```
+
+## unsupervised
+```{r}
+brca.se.obj <- createPrPsUnSupervised(
+    se.obj = brca.se.obj, 
+    assay.name = 'RawCount', 
+    approach = 'mnn',
+    uv.variables = c('library.size'))
+```
+
 
 ```{r}
 brca.se.obj <- RUVIII.PRPS(
     se.obj = brca.se.obj, 
-    assay.name = 'unstranded', 
+    assay.name = 'RawCount', 
     prps.group = 'supervised', 
     prps.set.names = NULL,
     ncg.group = 'supervised', 
     ncg.set.names = NULL, 
-    k = c(1,10,15, 20), 
+    k = c(1,10,15,20), 
     apply.log = 'assay', 
     pseudo.count = 1, 
     alpha = NULL,
@@ -766,7 +796,7 @@ brca.se.obj <- assessVariation(
     uv.variables = c('library.size', 'tumour.purity.estimate'), 
     apply.log = F
     )
-
+brca.se.obj@metadata$plot$
 ```
 
 ## RLE plot
@@ -1057,123 +1087,33 @@ frequency <- table(binned)
 ```
 
 
-
-# TCGA READ data ####
-## Download the data using the TCGAbiolinks R package
-
-```{r downloadingTheData, message=F, warning=F}
-# tcga.read.ranseq.data <- TCGAbiolinks::GDCquery(
-#     project = 'TCGA-READ',
-#     data.category = 'Transcriptome Profiling',
-#     data.type = 'Gene Expression Quantification'
-# )
-# TCGAbiolinks::GDCdownload(tcga.read.ranseq.data)
-# exp.se.obj <- TCGAbiolinks::GDCprepare(query = tcga.read.ranseq.data)
-# qs::qsave(x = exp.se.obj, file = 'TCGA_ReAdRNAseq_StarCounts38_TCGAbiolinks.021424.qs')
-```
-
-```{r message=FALSE, warning=F}
-library(SummarizedExperiment)
-library(RUVIIIPRPS)
-# exp.se.obj <- qs::qread(
-#     file = 'TCGA_BrCaRNAseq_StarCounts38_TCGAbiolinks.021424.qs'
-#     )
-path <- "/Users/molania.r/Documents/Scientific_files.files/CurrentProjects/Project13.3_Test_RUVIIIPRPS_Package/Test_RUVIIIPRPS_Functions/"
-exp.se.obj <- qs::qread(paste0(path,'TCGA_ReAdRNAseq_StarCounts38_TCGAbiolinks.021424.qs'))
-gene.annot <- rowData(x = exp.se.obj)
-exp.se.obj <- exp.se.obj[ gene.annot$gene_type == 'protein_coding', ]
-gene.annot <- rowData(x = exp.se.obj)
-exp.se.obj <- exp.se.obj[!duplicated(gene.annot$gene_name), ]
-row.names(exp.se.obj) <- rowData(x = exp.se.obj)$gene_name
-```
-
+# Estimate possible unknown batch effects
 
 ```{r}
-path <- '/Users/molania.r/Documents/Scientific_files.files/CurrentProjects/Project13.3_Test_RUVIIIPRPS_Package/Test_RUVIIIPRPS_Functions/Data/'
-batch.info <- readxl::read_excel(
-    path = paste0(path, '/41587_2022_1440_MOESM3_ESM.xlsx'), 
-    sheet = 1, 
-    skip = 1)
-batch.info <- as.data.frame(batch.info)
-index <- intersect(batch.info$Samples, colnames(exp.se.obj))
-exp.se.obj <- exp.se.obj[ , index]
-batch.info <- batch.info[batch.info$Samples %in% index, ]
-exp.se.obj$batch.years <- batch.info$Year
-exp.se.obj$batch.plates <- batch.info$Plates
+raw.counts <- log2(assay(brca.se.obj, 'unstranded') + 1)
+mm <- apply(
+    raw.counts, 
+    1, function(x) cor.test(x, brca.se.obj@metadata$UknownUV$unstranded$BrCa_Batches$input.data)[[4]])
+ncg <- names(sort(mm, decreasing = T)[1:200])
+
+gene.an <- rowData(brca.se.obj)
+ncg <- gene.an$micorarray.hk.genes
+
+brca.se.obj <- RUVIIIPRPS::identifyUnknownUV(
+    se.obj = brca.se.obj[ncg , ], 
+    assay.name = 'unstranded', approach = 'pca',  nb.pcs = 3, 
+    max.samples.per.batch = .4, 
+    order.batches = F,
+    remove.current.estimates = TRUE,
+    output.name = 'BrCa_Batches')
+temp <- table(brca.se.obj@metadata$UknownUV$unstranded$BrCa_Batches$batches,
+      brca.se.obj$batch.years)
+ComplexHeatmap::Heatmap(
+    matrix = temp, 
+    cluster_rows = T, 
+    cluster_columns = T, 
+    col = c('grey90', 'darkgreen'), 
+    name = 'Frequency')
+brca.se.obj$unknown.batch <- brca.se.obj@metadata$UknownUV$unstranded$BrCa_Batches$batches
 ```
 
-
-```{r}
-selected.assays <- c(
-    'unstranded', 
-    'tpm_unstrand', 
-    'fpkm_unstrand', 
-    'fpkm_uq_unstrand')
-data.sets <- lapply(
-    selected.assays, 
-    function(x) assay(x = exp.se.obj, i = x))
-names(data.sets) <- selected.assays
-sample.annotation <- as.data.frame(colData(exp.se.obj))
-gene.annot <- as.data.frame(rowData(exp.se.obj))
-colnames(gene.annot)[7] <- 'hgnc_symbol'
-```
-
-# Create a SummarizedExperiment object
-Here we use the createSeObj() function to generate SummarizedExperiment object from the TCGA BrCa datastes. We remove lowly expressed genes, estimate library size and tumor purity. 
-
-```{r createSeObj, message=FALSE, warning=F}
-read.se.obj <- createSeObj(
-    data.sets = data.sets, 
-    raw.count.assay.name = 'unstranded', 
-    gene.annotation = gene.annot,
-    create.sample.annotation = FALSE,
-    sample.annotation = sample.annotation,
-    remove.lowly.expressed.genes = TRUE, 
-    assay.name.to.estimate.purity = 'unstranded',
-    estimate.tumor.purity = 'both',
-    calculate.library.size = TRUE,
-    add.housekeeping.genes = TRUE,
-    add.immun.stroma.genes = TRUE,
-    gene.group = 'hgnc_symbol'
-    )
-plot(read.se.obj$tumour.purity.singscore, read.se.obj$tumour.purity.estimate)
-```
-
-
-
-# Variation assessment
-We select the 'paper_BRCA_Subtype_PAM50' as a biological variation and the 'library.size', 'tumour.purity' and 
-'batch_FcCh' as sources of unwanted variation.
-
-In this section we will assess the variation of different biological and unwanted variables using a range of metrics.
-Before applying the metrics, we will assess the structure and missing values in the SummarizedExperiment object.
-
-
-```{r}
-read.se.obj$pu <- kmeans(x = read.se.obj$tumour.purity.estimate, centers = 3)$cluster
-read.se.obj <- RUVIIIPRPS::identifyUnknownUV(
-    se.obj = read.se.obj, 
-    assay.name = 'unstranded', 
-    regress.out.bio.variables = 'batch.plates',
-    clustering.methods = 'kmeans',
-    approach = 'rle', 
-    max.samples.per.batch = .5, 
-    nb.pcs = 1,
-    nb.clusters = 3)
-heatmap(table(paste0(read.se.obj$pu),
-      read.se.obj@metadata$UknownUV$unstranded$pca_onAllGenes_kmeansClustering$batches))
-
-plot(read.se.obj@metadata$UknownUV$unstranded$rle.median_onAllGenes_kmeansClustering$input.data, 
-     read.se.obj$tumour.purity.estimate,
-     col = factor(read.se.obj@metadata$UknownUV$unstranded$rle.median_onAllGenes_kmeansClustering$batches))
-
-
-plot(read.se.obj@metadata$UknownUV$unstranded$pca_onAllGenes_kmeansClustering$input.data[,2], read.se.obj$tumour.purity.estimate)
-mm <- brca.se.obj@metadata$UknownUV$unstranded$rlemedianonAllGenes_kmeansClustering$batches
-table(mm)
-table(mm, brca.se.obj$batch.FcCh)
-
-plot(brca.se.obj@metadata$SourcesOfUV$unstranded$Unknown$rlemedianonAllGenes_kmeansClustering$input.data, 
-     col = factor(brca.se.obj@metadata$SourcesOfUV$unstranded$Unknown$rlemedianonAllGenes_kmeansClustering$batches) )
-
-```
