@@ -118,44 +118,75 @@ dataPath <- "/Users/sep/Documents/projects/RUVIIIPRPS_manual/data/"
  
 # Download the data using the TCGAbiolinks R package
 
+# Download, read and prepare the data
+## TCGA-BRCA data
+The TCGA Breast cancer data can be downloaded from the `TCGAbiolinks` package. The commented code below needs to be run only once to download the data, and for later use we can load the downloaded data.
+
 ```{r downloadingTheData, message=F, warning=F}
 # harmonized.data <- TCGAbiolinks::GDCquery(
 #     project = 'TCGA-BRCA',
 #     data.category = 'Transcriptome Profiling',
 #     data.type = 'Gene Expression Quantification'
 #     )
+# --------------------------------------
+# o GDCquery: Searching in GDC database
+# --------------------------------------
+# Genome of reference: hg38
+# --------------------------------------------
+# oo Accessing GDC. This might take a while...
+# --------------------------------------------
+# ooo Project: TCGA-BRCA
+# --------------------
+# oo Filtering results
+# --------------------
+# ooo By data.type
+# ----------------
+# oo Checking data
+# ----------------
+# ooo Checking if there are duplicated cases
+# ooo Checking if there are results for the query
+# -------------------
+# o Preparing output
+# -------------------
+
 # TCGAbiolinks::GDCdownload(harmonized.data)
+# Downloading data for project TCGA-BRCA
+# GDCdownload will download 1231 files. A total of 5.223473855 GB
 # exp.se.obj <- TCGAbiolinks::GDCprepare(query = harmonized.data)
+
+#----- save data for later use:
 # qs::qsave(x = exp.se.obj, file = 'TCGA_BrCaRNAseq_StarCounts38_TCGAbiolinks.021424.qs')
 ```
 
-
+We read the data, subset to protein coding genes, remove duplicated gene names, and set the row names to be gene names.
 ```{r message=FALSE, warning=F}
-library(SummarizedExperiment)
-library(RUVIIIPRPS)
-# exp.se.obj <- qs::qread(
-#     file = 'TCGA_BrCaRNAseq_StarCounts38_TCGAbiolinks.021424.qs'
-#     )
-path <- "/Users/molania.r/Documents/Scientific_files.files/CurrentProjects/Project13.3_Test_RUVIIIPRPS_Package/Test_RUVIIIPRPS_Functions/"
-exp.se.obj <- qs::qread(paste0(path,'TCGA_BrCaRNAseq_StarCounts38_TCGAbiolinks.021424.qs'))
+exp.se.obj <- qs::qread(
+    file = paste0(dataPath, 'TCGA_BrCaRNAseq_StarCounts38_TCGAbiolinks.021424.qs')
+    )
+
 gene.annot <- rowData(x = exp.se.obj)
+# subset to protein coding genes
 exp.se.obj <- exp.se.obj[ gene.annot$gene_type == 'protein_coding', ]
 gene.annot <- rowData(x = exp.se.obj)
+# remove duplicated gene names
 exp.se.obj <- exp.se.obj[!duplicated(gene.annot$gene_name), ]
+# set the row names to be gene names
 row.names(exp.se.obj) <- rowData(x = exp.se.obj)$gene_name
 ```
 
-
-```{r}
-path <- '/Users/molania.r/Documents/Scientific_files.files/CurrentProjects/Project13.3_Test_RUVIIIPRPS_Package/Test_RUVIIIPRPS_Functions/Data/'
+## Batch information data
+We also read in the batch data from Molania et al *Nat Biotech* (2023) paper. This data has different batch information (e.g. Year, Plate, Centre, etc) for all TCGA cancer data sets. We subset the batch data to Breast cancer only, and add those info to the `SummarizedExperiment` object. 
+```{r message=FALSE, warning=F}
 batch.info <- readxl::read_excel(
-    path = paste0(path, '/41587_2022_1440_MOESM3_ESM.xlsx'), 
+    path = paste0(dataPath, '41587_2022_1440_MOESM3_ESM.xlsx'), 
     sheet = 1, 
     skip = 1)
 batch.info <- as.data.frame(batch.info)
+# subset batch data to the breast cancer samples
 index <- intersect(batch.info$Samples, colnames(exp.se.obj))
 exp.se.obj <- exp.se.obj[ , index]
 batch.info <- batch.info[batch.info$Samples %in% index, ]
+## add batch information to the SummarizedExperiment Object
 exp.se.obj$batch.years <- batch.info$Year
 exp.se.obj$batch.plates <- batch.info$Plates
 exp.se.obj$batch.FcCh <- 'FcCh.A'
@@ -163,6 +194,13 @@ exp.se.obj$batch.FcCh[exp.se.obj$batch.years > 2011] <- 'FcCh.B'
 ```
 
 
+
+
+
+
+
+# Create a SummarizedExperiment object
+Here we use the createSeObj() function to generate SummarizedExperiment object from the TCGA BrCa datastes. We remove lowly expressed genes, estimate library size and tumor purity. 
 ```{r}
 selected.assays <- c(
     'unstranded', 
@@ -177,9 +215,6 @@ sample.annotation <- as.data.frame(colData(exp.se.obj))
 gene.annot <- as.data.frame(rowData(exp.se.obj))
 colnames(gene.annot)[7] <- 'hgnc_symbol'
 ```
-
-# Create a SummarizedExperiment object
-Here we use the createSeObj() function to generate SummarizedExperiment object from the TCGA BrCa datastes. We remove lowly expressed genes, estimate library size and tumor purity. 
 
 ```{r createSeObj, message=FALSE, warning=F}
 brca.se.obj <- createSeObj(
