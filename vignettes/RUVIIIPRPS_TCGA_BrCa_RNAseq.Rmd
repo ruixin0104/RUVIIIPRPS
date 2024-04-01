@@ -249,6 +249,8 @@ We select the 'paper_BRCA_Subtype_PAM50' as a biological variation and the 'libr
 
 In this section we will assess the variation of different biological and unwanted variables using a range of metrics. Before applying the metrics, we will assess the structure and missing values in the SummarizedExperiment object.
 
+The results of all these assessments for each assay are saved under `brca.se.obj@metadata$metric`, and corresponding plots are saved under `brca.se.obj@metadata$plot`. All the assessment metrics that can be calculated for each of the selected variables can be visualised through the `getAssessmentMetrics()` function. 
+
 ```{r assessSeObject, message=FALSE, warning=F}
 colnames(brca.se.obj@colData)[colnames(brca.se.obj@colData) == 'paper_BRCA_Subtype_PAM50'] <-
   'PAM50'
@@ -267,9 +269,16 @@ brca.se.obj <- checkSeObj(
 )
 ```
 
+```{r}
+# Visualise all possible assessment metrics for the variables
+brca.se.obj <- RUVIIIPRPS:::getAssessmentMetrics(
+    se.obj = brca.se.obj, 
+    variables = variables)
+
+```
 
 ## RLE plot
-Relative log expression (RLE) plots are useful ways to assess the unwanted variation in the data (see [Gandolfo et al, 2018](https://pubmed.ncbi.nlm.nih.gov/29401521/)). We first compute the RLE of all the assays in the SummarizedExperiment object. These values along with median and IQR are stored in the brca.se.obj. We then use these values to generate RLE plots, and examine associations of different variables with RLE medians/IQRs.
+Relative log expression (RLE) plots are useful ways to assess the unwanted variation in the data (see [Gandolfo et al, 2018](https://pubmed.ncbi.nlm.nih.gov/29401521/)). We first compute the RLE of all the assays in the SummarizedExperiment object. These values along with median and IQR are stored in the brca.se.obj. We then use these values to generate RLE plots, and examine associations of different variables with RLE medians/IQRs. The results are saved as part of `RLE` slot for each assay under `brca.se.obj@metadata$metric`. Corresponding plots are saved under `brca.se.obj@metadata$plot`.
 
 ```{r computeRLE, message=FALSE, warning=F}
 assay.names <- c('RawCount','TPM','FPKM', 'FPKM.UQ')
@@ -314,6 +323,7 @@ brca.se.obj <- plotRLE(
 # brca.se.obj@metadata$plot$RLE$colored.rle.plot$batch.FcCh
 ```
 
+### RLE medians and IQRs
 We can also use the `plotRleVariable()` function to plot a selected variable against the medians and IQRs of the RLE data. This function, generates and saves scatterplots or boxplots depending on the input variables; for example:
 
 - For a **categorical variable** (*e.g.* cancer subtypes and two batches of FcCh) the function generates boxplots and performs ANOVA analysis
@@ -347,10 +357,20 @@ for(i in variables){
 ```
 
 ## PCA plot
+In this section, we show how to perform PCA, and how to use the results of PCA to perform a range of exploratory analyses. These analyses are largely dependent on the type of variables being explored, more specifically categorical vs continuous variables:
+
+- **Categorical variables**: 
+    - PC and variable correlation (vector correlation)
+    - Adjusted Rand index (ARI)
+    - Silhouette coef
+- **Continuous variables**:
+    - PC variable regression 
+
+The `computePCA()` function performs singular value decomposition, and calculates percentage variation of each PCs. This can be run on one assay or selected assays in the SE object; if assay is not selected, the function by default runs on all available assays. The default mode of this function is to run on a fast mode (`fast.pca = TRUE`), which means that it calculates a certain number of left singular vectors (based on `nb.pcs` argument) instead of the full possible vectors.
 ```{r}
 brca.se.obj <- computePCA(
     se.obj = brca.se.obj, 
-    assay.names = 'all', 
+    assay.names = assay.names, 
     fast.pca = TRUE, 
     nb.pcs = 10, 
     center = TRUE, 
@@ -362,9 +382,14 @@ brca.se.obj <- computePCA(
     remove.na = 'none', 
     save.se.obj = TRUE, 
     verbose = TRUE)
-brca.se.obj@metadata$metric$unstranded$fastPCA$svd$d
 ```
 
+Using the calculated PCs, we then generate scatterplots and boxplots to explore different sources of variations. 
+Indicates a name of the column in the sample annotation of the SummarizedExperiment object.
+If the `variable` argument is a continuous variable, the function creates scatterplots of PCs1-3 vs the selected variable. If `variable` is categorical, then the function generates pairwise scatterplots of PCs1-3 coloured by the selected categorical variable; if `plot.type = "boxplot"` for categorical variables, the function creates boxplots of PCs1-3 across the variable.
+
+**NOTE to improve `plotPCA()`**:
+Currently, when `plot.type = "boxplot"` this does not print the boxplots. Need to be updated s that prints the plot.  
 ```{r}
 for(i in variables){
     brca.se.obj <- RUVIIIPRPS::plotPCA(
@@ -384,21 +409,26 @@ for(i in variables){
     save.se.obj = TRUE, 
     verbose = TRUE)
 }
-brca.se.obj@metadata$plot$PCA$fast.pca$library.size$pca.var.scat.plot
 
+## check PCA scatterplots of all assays coloured by PAM50
+brca.se.obj@metadata$plot$PCA$fast.pca$PAM50$pca.scat.plot
 ```
 
+### PC Variable Correlation
+Vector correlation performed by `computePCVariableCorrelation()` measures the associations between cumulative PCs and a selected **categorical variable**. 
+Then, the `plotPCVariableCorrelation()` function visualises the results of vector correlation analysis in the form of lineplots, with each line representing the results from different assays/normalisations across cumulative PCs. A good normalisation must show a higher correlation values for the biological factors (*e.g.* PAM50) and lower correlation values for batch variables (*e.g.* batch.FcCh). The `VCA` results are saved in the metadata. 
 ```{r}
 categorical.variables <- c('batch.FcCh', 'PAM50')
-for(i in categorical.variables){
-    brca.se.obj <- computePCVariableCorrelation(
-    se.obj = brca.se.obj, 
-    assay.names = 'all', 
-    variable = i, 
-    fast.pca = TRUE, 
-    nb.pcs = 10, 
-    save.se.obj = TRUE, 
-    verbose = TRUE)
+for (i in categorical.variables) {
+  brca.se.obj <- computePCVariableCorrelation(
+    se.obj = brca.se.obj,
+    assay.names = 'all',
+    variable = i,
+    fast.pca = TRUE,
+    nb.pcs = 10,
+    save.se.obj = TRUE,
+    verbose = TRUE
+  )
 }
 ```
 
@@ -414,23 +444,23 @@ for(i in categorical.variables){
     save.se.obj = TRUE, 
     verbose = TRUE)
 }
-
-brca.se.obj@metadata$metric$unstranded$pcs.vect.corr$batch_FcCh$vect.corr.plot
 ```
 
+### PC Variable Regression
+For **continuous variables**, we perform linear regression using `computePCVariableRegression()` to check their associations with first cumulative PCs. We then use `plotPCVariableRegression()` to generate linear regression anaysis (LRA) lineplots of R^2 of the fitted linear models. A good nomalisation shows a smaller R^2 for continuous batch variables, such as library size. The `LRA` results are saved in the metadata. 
 ```{r}
 continuous.variables <- c('library.size', 'tumour.purity.estimate')
-for(i in continuous.variables){
-    brca.se.obj <- computePCVariableRegression(
-    se.obj = brca.se.obj, 
-    assay.names = 'all', 
-    variable = i, 
-    fast.pca = TRUE, 
-    nb.pcs = 10, 
+for (i in continuous.variables) {
+  brca.se.obj <- computePCVariableRegression(
+    se.obj = brca.se.obj,
+    assay.names = 'all',
+    variable = i,
+    fast.pca = TRUE,
+    nb.pcs = 10,
     save.se.obj = TRUE,
-    verbose = TRUE)
+    verbose = TRUE
+  )
 }
-brca.se.obj@metadata$metric$unstranded$pcs.lm$tumour.purity.estimate$rseq
 ```
 
 ```{r}
@@ -447,11 +477,13 @@ for(i in continuous.variables){
 }
 ```
 
+### Adjusted Rand Index (ARI)
+We use the selected first PCs (`nb.pcs = 3` by default) to cluster samples. By calculating ARI between the generated clusters and **categorical variables** we can quantify how well each group in a given variable (e.g. batch.FcCh) map to each cluster. The number of clusters are defined based on the number of unique elements in the selected variables (e.g. two batches for batch.FcCh). We then use `plotARI()` to generate barplots of ARIs for each assay/normalisation. If a data is normalised well, we expect to see higher ARI for biology variable and lower ARI for batch variables, which means that main clusters in the data are associated with biology while batch effects are more randomly distributed. 
 ```{r}
 for(i in categorical.variables){
     brca.se.obj <- computeARI(
     se.obj = brca.se.obj, 
-    assay.names = 'all', 
+    assay.names = assay.names, 
     variable = i, 
     fast.pca = TRUE,
     nb.pcs = 3, 
@@ -467,7 +499,7 @@ for(i in categorical.variables){
 for(i in categorical.variables){
     brca.se.obj <- plotARI(
     se.obj = brca.se.obj, 
-    assay.names = 'all', 
+    assay.names = assay.names, 
     variables = i, 
     ari.method = 'hclust.complete.euclidian', 
     plot.type = 'single.plot', 
@@ -478,11 +510,18 @@ for(i in categorical.variables){
 
 ```
 
+### Silhouette coefficient
+The `computeSilhouette()` function calculates Silhouette coefficients to assess the cohesion and separation of **categorical variables** (biological or batch groups). This function uses Euclidean distance to calculate Silhouette coefficients based on:
+
+- *Cohesion* (intra-cluster distance): average distance between each sample and all other samples in the same cluster
+- *Separation* (nearest-cluster distance): average distance between each sample and all samples in the nearest cluster that the given sample is not a part of.
+
+A good normalization results in a larger silhouette coefficient for biological variables, and smaller coefficient for batch variables. 
 ```{r}
 for(i in categorical.variables){
     brca.se.obj <- computeSilhouette(
     se.obj = brca.se.obj, 
-    assay.names = 'all', 
+    assay.names = assay.names, 
     variable = i, 
     dist.measure = 'euclidian', 
     fast.pca = TRUE, 
@@ -493,12 +532,13 @@ for(i in categorical.variables){
 
 ```
 
-
+**NOTE to improve `plotSilhouette()`**:
+Change the function so that when `plot.output = TRUE`, we do not plot the barplots for each assay separately.
 ```{r}
 for(i in categorical.variables){
     brca.se.obj <- plotSilhouette(
     se.obj = brca.se.obj, 
-    assay.names = 'all',
+    assay.names = assay.names,
     variables = i, 
     silhouette.method = 'sil.euclidian', 
     plot.type = 'single.plot', 
@@ -508,7 +548,14 @@ for(i in categorical.variables){
 }
 ```
 
+## Gene Variable Associations
+In this section, we calculate the association between expression of individual genes and different variables. These results can be used to assess how well each normalisation performs. 
 
+**NOTE to improve other functions based on this part:**: 
+The results here could be used to help with defining negative control genes. So no need to calculate corr later on if we define them here. 
+
+### Genes Variable Correlation
+We calculate the correlation (Spearman or Pearson) between individual gene-level expression of each assay and a given **continuous variable**. Using `plotGenesVariableCorrelation()` we generate boxplots of all correlation values for each assay/normalisation. A good normalisation should result in a correlation boxplot whose medians are closer to zero for the batch variables (e.g. library size) with smaller IQRs, meaning that most genes are not correlated with batch variables. 
 ```{r}
 for(i in continuous.variables){
     brca.se.obj <- computeGenesVariableCorrelation(
@@ -528,6 +575,8 @@ for(i in continuous.variables){
     save.se.obj = TRUE, 
     verbose = TRUE)
 }
+
+head(brca.se.obj@metadata$metric$FPKM$Correlation$spearman$library.size$cor.coef)
 ```
 
 
@@ -535,18 +584,17 @@ for(i in continuous.variables){
 for(i in continuous.variables){
     brca.se.obj <- plotGenesVariableCorrelation(
     se.obj = brca.se.obj, 
-    assay.names = 'all', 
+    assay.names = assay.names, 
     variable = i, 
     correlation.method = 'spearman', 
     plot.output = TRUE, 
     save.se.obj = TRUE, 
     verbose = TRUE)
 }
-
-brca.se.obj@metadata$metric$unstranded$genes.var.corr$gene.spearman.corr$tumour.purity.estimate$corrs
 ```
 
-
+### Genes Variable Anova
+If we have **categorical variables**, we can examine the associations between genes and variables using the ANOVA test through the `computeGenesVariableAnova()` function. The results are visualised in form of boxplots. In this case, we expect to see a larger F statistic for biology variables, and a lower F value for batch variables for a good normalisation method. 
 ```{r}
 for(i in categorical.variables){
    brca.se.obj <- computeGenesVariableAnova(
@@ -564,25 +612,23 @@ for(i in categorical.variables){
     save.se.obj = TRUE, 
     verbose = TRUE) 
 }
-
-brca.se.obj@metadata$metric$unstranded$aov$genes.aov.anova$batch_FcCh$fvals
 ```
 
 ```{r}
 for(i in categorical.variables){
     brca.se.obj <- plotGenesVariableAnova(
     se.obj = brca.se.obj, 
-    assay.names = 'all', 
+    assay.names = assay.names, 
     variable = i, 
     anova.method = 'aov', 
     plot.output = TRUE, 
     save.se.obj = TRUE, 
     verbose = TRUE)
 }
-brca.se.obj@metadata$plot$ANOVA$aov$batch.FcCh
 ```
 
-
+## Compute DGE
+A good normalisation results in relatively larger number of Differential Gene Expression (DGE) when comparing biology groups and no/low number of DGE when comparing different groups of batch variables. The `computeDGE()` performs Wilcoxon test between pairwise groups of a variable for each assay/normalisation. The `plotDGE()` function generates p-value histograms for a given *categorical variable*.
 ```{r}
 for(i in categorical.variables){
     brca.se.obj <- computeDGE(
@@ -605,17 +651,10 @@ brca.se.obj <- plotDGE(
     assay.names = 'all', 
     variable = 'batch.FcCh', 
     plot.ncol = 4, 
+    plot.nrow = 1,
     plot.output = TRUE, 
     save.se.obj = TRUE, 
     verbose = FALSE)
-brca.se.obj@metadata$plot$
-```
-
-```{r}
-brca.se.obj <- RUVIIIPRPS:::getAssessmentMetrics(
-    se.obj = brca.se.obj, 
-    variables = variables)
-
 ```
 
 
