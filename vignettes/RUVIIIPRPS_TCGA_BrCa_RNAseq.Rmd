@@ -1,7 +1,7 @@
 ---
 title: "Fast and accurate integration of TCGA BRCA RNA-seq data using the RUVIIIPRPS R package"
 author:
-- name: Ramyar Molania
+- name: Ramyar Molania & Sepideh Foroutan
   affiliation: Papenfuss Lab, Bioinformatics, WEHI.
   url: https://www.wehi.edu.au/people/tony-papenfuss
 date: "15-02-2020"
@@ -77,7 +77,45 @@ knitr::opts_chunk$set(
 
 # Introduction
 In this vignette, we showed how to use the RUVIIIPRPS R package to normalize the TCGA breast cancer RNA-seq data.
+First, we install RUVIIIPRPS package. You may need to install several dependencies first (see commented codes below) to be able to install the RUVIIIPRPS package. In this section, we also load required libraries and set the required paths.
+## Install packages and set paths
+```{r}
+library(devtools)
+library(SummarizedExperiment)
 
+devtools::install_github(
+    repo = 'RMolania/RUVIIIPRPS@Ramyar-M',
+    force = TRUE,
+    build_vignettes = FALSE)
+# ERROR: dependencies ‘ggforestplot’, ‘qvalue’, ‘singscore’, ‘kunstomverse’, ‘SummarizedExperiment’, ‘BiocNeighbors’, ‘EDASeq’, ‘DESeq2’, ‘biomaRt’ are not available for package ‘RUVIIIPRPS’
+
+# BiocManager::install(
+#   c(
+#     'ggforestplot',
+#     'qvalue',
+#     'singscore',
+#     'kunstomverse',
+#     'SummarizedExperiment',
+#     'BiocNeighbors',
+#     'EDASeq',
+#     'DESeq2',
+#     'biomaRt'
+#   )
+# )
+## need to install two packages from Github: 
+# devtools::install_github("NightingaleHealth/ggforestplot")
+# devtools::install_github("jbkunst/kunstomverse")
+
+library(RUVIIIPRPS)
+
+# Error: package or namespace load failed for ‘RUVIIIPRPS’ in loadNamespace(j <- i[[1L]], c(lib.loc, .libPaths()), versionCheck = vI[[j]]):
+#  namespace ‘tidyselect’ 1.2.0 is already loaded, but >= 1.2.1 is required
+
+## change this path according to your computer path:
+dataPath <- "/Users/sep/Documents/projects/RUVIIIPRPS_manual/data/"
+```
+
+ 
 # Download the data using the TCGAbiolinks R package
 
 ```{r downloadingTheData, message=F, warning=F}
